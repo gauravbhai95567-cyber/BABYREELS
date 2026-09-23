@@ -13,6 +13,10 @@ import requests
 import psutil
 from collections import defaultdict
 
+# ✅ Load .env
+from dotenv import load_dotenv
+load_dotenv()
+
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
