@@ -753,8 +753,7 @@ def status_command(message):
                 f"📊 𝗞𝗼𝗶 𝗔𝗰𝘁𝗶𝘃𝗲 𝗔𝘁𝘁𝗮𝗰𝗸 𝗡𝗮𝗵𝗶 𝗛𝗮𝗶\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"🚀 Attack start karne ke liye:\n"
-                f"`/attack <ip> <port> <time>`",
-                parse_mode="Markdown"
+                f"/attack <ip> <port> <time>"
             )
             return
 
@@ -768,13 +767,12 @@ def status_command(message):
             message,
             f"📊 𝗬𝗢𝗨𝗥 𝗔𝗖𝗧𝗜𝗩𝗘 𝗔𝗧𝗧𝗔𝗖𝗞 📊\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"💢 𝗧𝗮𝗿𝗴𝗲𝘁: `{active['target']}:{active['port']}`\n"
+            f"💢 𝗧𝗮𝗿𝗴𝗲𝘁: {active['target']}:{active['port']}\n"
             f"⏱️ 𝗥𝗲𝗺𝗮𝗶𝗻𝗶𝗻𝗴: {remaining}s / {total}s\n"
             f"📊 𝗣𝗿𝗼𝗴𝗿𝗲𝘀𝘀: {bar} {percent}%\n"
             f"🕐 𝗦𝘁𝗮𝗿𝘁𝗲𝗱: {active['start_time'].strftime('%H:%M:%S')}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"⏳ Attack complete hone ka wait karo.",
-            parse_mode="Markdown"
+            f"⏳ Attack complete hone ka wait karo."
         )
     except Exception as e:
         print(f"Status error: {e}", flush=True)
@@ -1175,13 +1173,12 @@ def handle_attack(message):
                 message,
                 f"🚫 𝗘𝗞 𝗧𝗜𝗠𝗘 𝗣𝗘 𝗘𝗞 𝗛𝗜 𝗔𝗧𝗧𝗔𝗖𝗞! 🚫\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"💢 𝗔𝗰𝘁𝗶𝘃𝗲 𝗧𝗮𝗿𝗴𝗲𝘁: `{active['target']}:{active['port']}`\n"
+                f"💢 𝗔𝗰𝘁𝗶𝘃𝗲 𝗧𝗮𝗿𝗴𝗲𝘁: {active['target']}:{active['port']}\n"
                 f"⏱️ 𝗥𝗲𝗺𝗮𝗶𝗻𝗶𝗻𝗴: {remaining}s / {total}s\n"
                 f"📊 𝗣𝗿𝗼𝗴𝗿𝗲𝘀𝘀: {bar} {percent}%\n\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
                 f"⏳ Pehle wale attack ke complete hone ka wait karo.\n"
-                f"📊 Live status: /status",
-                parse_mode="Markdown"
+                f"📊 Live status: /status"
             )
             return
 
@@ -1201,9 +1198,8 @@ def handle_attack(message):
     if len(command_parts) != 4:
         bot.reply_to(
             message,
-            "⚠️ 𝗨𝘀𝗮𝗴𝗲: `/attack <ip> <port> <time>`\n"
-            "📌 𝗘𝘅𝗮𝗺𝗽𝗹𝗲: `/attack 1.1.1.1 80 60`",
-            parse_mode="Markdown"
+            "⚠️ 𝗨𝘀𝗮𝗴𝗲: /attack <ip> <port> <time>\n"
+            "📌 𝗘𝘅𝗮𝗺𝗽𝗹𝗲: /attack 1.1.1.1 80 60"
         )
         return
 
@@ -1211,7 +1207,7 @@ def handle_attack(message):
 
     # IP validate
     if not validate_target(target):
-        bot.reply_to(message, "❌ 𝗜𝗻𝘃𝗮𝗹𝗶𝗱 𝗜𝗣!\n📌 Example: `1.1.1.1`", parse_mode="Markdown")
+        bot.reply_to(message, "❌ 𝗜𝗻𝘃𝗮𝗹𝗶𝗱 𝗜𝗣!\n📌 Example: 1.1.1.1")
         return
 
     # IP blocked check
@@ -1501,6 +1497,22 @@ def load_saved_channels():
         print(f"⚠️ Channel ID not set! Run /setchannel <id>")
 
 
+# ===== ✅ WEBHOOK CLEANUP FUNCTION =====
+def setup_polling():
+    """Webhook delete karo aur polling ke liye ready karo"""
+    try:
+        result = bot.delete_webhook(drop_pending_updates=True)
+        print(f"✅ Webhook deleted: {result}", flush=True)
+    except Exception as e:
+        print(f"⚠️ Webhook delete failed: {e}", flush=True)
+
+    try:
+        bot.get_updates(offset=-1, limit=1, timeout=1)
+        print("✅ Pending updates cleared", flush=True)
+    except Exception as e:
+        print(f"⚠️ Update clear failed: {e}", flush=True)
+
+
 load_saved_channels()
 protection.enabled = get_ddos_protection()
 
@@ -1509,9 +1521,17 @@ print(f"🌐 API: {API_BASE_URL}")
 print(f"🔢 Slots: {API_SLOTS}")
 print("=" * 50)
 
+# ✅ Webhook cleanup (polling se pehle zaroori)
+setup_polling()
+
 while True:
     try:
         bot.polling(none_stop=True, interval=0, timeout=20)
     except Exception as e:
         print("Polling crashed, restarting...", e)
+        # Crash ke baad phir se webhook cleanup
+        try:
+            bot.delete_webhook(drop_pending_updates=True)
+        except:
+            pass
         time.sleep(3)
