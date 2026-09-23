@@ -1,1 +1,1 @@
-web: python louda.py
+web: python BGMI.py
