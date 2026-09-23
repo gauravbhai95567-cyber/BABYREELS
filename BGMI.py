@@ -10,12 +10,21 @@ from pymongo import MongoClient
 from datetime import datetime, timedelta
 import time
 import requests
-import psutil
+
+# ✅ Safe psutil import
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
 from collections import defaultdict
 
-# ✅ Load .env
-from dotenv import load_dotenv
-load_dotenv()
+# ✅ Safe dotenv import
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("⚠️ python-dotenv not installed. Using defaults.", flush=True)
 
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
