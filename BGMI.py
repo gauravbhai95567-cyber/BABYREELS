@@ -51,6 +51,9 @@ DEFAULT_PRIVATE_COOLDOWN = int(os.getenv("DEFAULT_PRIVATE_COOLDOWN", "30"))
 DEFAULT_GROUP_COOLDOWN = int(os.getenv("DEFAULT_GROUP_COOLDOWN", "120"))
 DEFAULT_CONCURRENT_LIMIT = API_SLOTS
 
+# ✅ DEFAULT BLOCKED IP PREFIXES (20. and 52.)
+DEFAULT_BLOCKED_IPS = ['20.', '52.']
+
 
 def _mask(s, keep=6):
     if not s:
@@ -212,8 +215,21 @@ def set_maintenance(enabled, msg=None):
         set_setting('maintenance_msg', msg)
 
 
+# ============================================================
+# ✅ BLOCKED IPs — 20. and 52. ALWAYS BLOCKED (force-merge)
+# ============================================================
 def get_blocked_ips():
-    return get_setting('blocked_ips', [])
+    """Blocked IP prefixes return karo. 20. aur 52. hamesha included rahenge."""
+    blocked = get_setting('blocked_ips', [])
+    if not isinstance(blocked, list):
+        blocked = []
+    # ✅ Force ensure 20. and 52. always blocked
+    for prefix in DEFAULT_BLOCKED_IPS:
+        if prefix not in blocked:
+            blocked.append(prefix)
+    # Save back if changed
+    set_setting('blocked_ips', blocked)
+    return blocked
 
 
 def add_blocked_ip(ip_prefix):
@@ -226,6 +242,9 @@ def add_blocked_ip(ip_prefix):
 
 
 def remove_blocked_ip(ip_prefix):
+    """20. aur 52. ko remove nahi kar sakte."""
+    if ip_prefix in DEFAULT_BLOCKED_IPS:
+        return False
     blocked = get_blocked_ips()
     if ip_prefix in blocked:
         blocked.remove(ip_prefix)
@@ -1079,6 +1098,7 @@ def settings_command(message):
     response += f"📱 Private\n• Max: {get_private_max_attack_time()}s\n• CD: {get_private_cooldown()}s\n\n"
     response += f"👥 Group\n• Max: {get_group_max_attack_time()}s\n• CD: {get_group_cooldown()}s\n\n"
     response += f"⚡ Slots: {len(API_LIST)}\n\n"
+    response += f"🚫 Blocked IPs: {', '.join(get_blocked_ips())}\n\n"
     response += f"📢 Channel ID: {cid if cid else '❌ NOT SET'}"
     bot.reply_to(message, response)
 
@@ -1210,9 +1230,9 @@ def handle_attack(message):
         bot.reply_to(message, "❌ 𝗜𝗻𝘃𝗮𝗹𝗶𝗱 𝗜𝗣!\n📌 Example: 1.1.1.1")
         return
 
-    # IP blocked check
+    # ✅ IP blocked check (20. and 52. always blocked)
     if is_ip_blocked(target):
-        bot.reply_to(message, f"🚫 𝗬𝗲 𝗜𝗣 𝗯𝗹𝗼𝗰𝗸𝗲𝗱 𝗵𝗮𝗶!\n🎯 {target}")
+        bot.reply_to(message, f"🚫 𝗬𝗲 𝗜𝗣 𝗯𝗹𝗼𝗰𝗸𝗲𝗱 𝗵𝗮𝗶!\n🎯 {target}\n━━━━━━━━━━━━━━━━━━━━\n❌ 20.x.x.x aur 52.x.x.x allowed nahi hai.")
         return
 
     try:
@@ -1289,9 +1309,11 @@ def show_help(message):
 🎬 /reel_on, /reel_off, /addreel, /removereel, /listreels
 📸 /feedback_on, /feedback_off
 🛡️ /ddos_on, /ddos_off
+🚫 /block_ip, /unblock_ip
 🔧 /maintenance, /ok
 
 🔢 Max Concurrent: {len(API_LIST)}
+🚫 Default Blocked: 20. , 52.
 '''
     else:
         help_text = f'''🔐 𝗖𝗢𝗠𝗠𝗔𝗡𝗗 𝗨𝗦𝗘𝗥
@@ -1351,7 +1373,7 @@ def block_ip_command(message):
         bot.reply_to(message, "⚠️ Usage: /block_ip <prefix>")
         return
     if add_blocked_ip(parts[1]):
-        bot.reply_to(message, f"✅ Blocked: `{parts[1]}`*", parse_mode="Markdown")
+        bot.reply_to(message, f"✅ Blocked: `{parts[1]}`", parse_mode="Markdown")
     else:
         bot.reply_to(message, f"ℹ️ Already blocked!")
 
@@ -1365,10 +1387,30 @@ def unblock_ip_command(message):
     if len(parts) != 2:
         bot.reply_to(message, "⚠️ Usage: /unblock_ip <prefix>")
         return
+    if parts[1] in DEFAULT_BLOCKED_IPS:
+        bot.reply_to(message, f"❌ `{parts[1]}` ko unblock nahi kar sakte (default protection)!", parse_mode="Markdown")
+        return
     if remove_blocked_ip(parts[1]):
         bot.reply_to(message, f"✅ Unblocked!")
     else:
         bot.reply_to(message, f"❌ Not found!")
+
+
+@bot.message_handler(commands=["listblocked"])
+def list_blocked_command(message):
+    if not is_owner(message.from_user.id):
+        bot.reply_to(message, "❌ Owner only!")
+        return
+    blocked = get_blocked_ips()
+    if not blocked:
+        bot.reply_to(message, "📋 Koi blocked IP nahi hai.")
+        return
+    response = "🚫 𝗕𝗟𝗢𝗖𝗞𝗘𝗗 𝗜𝗣 𝗣𝗥𝗘𝗙𝗜𝗫𝗘𝗦\n━━━━━━━━━━━━━━━━━━━━\n"
+    for i, prefix in enumerate(blocked, 1):
+        marker = " 🔒 (default)" if prefix in DEFAULT_BLOCKED_IPS else ""
+        response += f"{i}. `{prefix}`{marker}\n"
+    response += f"\nTotal: {len(blocked)}"
+    bot.reply_to(message, response, parse_mode="Markdown")
 
 
 @bot.message_handler(commands=["maintenance"])
@@ -1410,6 +1452,7 @@ def welcome_start(message):
 🔢 Slots: {len(API_LIST)}
 🎬 Reels: {'ON' if get_reel_enabled() else 'OFF'}
 📸 Feedback: {'ON' if get_feedback_enabled() else 'OFF'}
+🚫 Blocked IPs: {', '.join(get_blocked_ips())}
 
 Use /help for commands.'''
     else:
@@ -1495,6 +1538,9 @@ def load_saved_channels():
         print(f"📢 Private channel loaded: {cid}")
     else:
         print(f"⚠️ Channel ID not set! Run /setchannel <id>")
+    # ✅ Ensure blocked IPs initialized
+    blocked = get_blocked_ips()
+    print(f"🚫 Blocked IP prefixes: {', '.join(blocked)}", flush=True)
 
 
 # ===== ✅ WEBHOOK CLEANUP FUNCTION =====
@@ -1519,6 +1565,7 @@ protection.enabled = get_ddos_protection()
 print("🔥 BOT STARTING...")
 print(f"🌐 API: {API_BASE_URL}")
 print(f"🔢 Slots: {API_SLOTS}")
+print(f"🚫 Blocked: 20. , 52.")
 print("=" * 50)
 
 # ✅ Webhook cleanup (polling se pehle zaroori)
